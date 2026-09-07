@@ -277,7 +277,7 @@ The project demonstrates concepts from multiple Computer Engineering subjects.
                     +--------------------+
 
 
-
+```
 
 ## Module Division
 
@@ -443,7 +443,7 @@ The module also supports report export and follows modular design principles to 
 
 
 
----
+```
 
 ## User Roles
 
