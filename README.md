@@ -443,7 +443,7 @@ The module also supports report export and follows modular design principles to 
 
 
 
-
+---
 
 ## User Roles
 
