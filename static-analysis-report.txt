@@ -1,0 +1,84 @@
+MediStore MS — Static Analysis and Consistency Report
+====================================================
+Date: 2026-09-23
+Scope: static source review, syntax validation, project scan, and existing app-suite verification
+Method: no live backend or external service connectivity was used; only project files, syntax checks, and the in-repo test harness were reviewed.
+
+Validation Summary
+------------------
+- JavaScript syntax check: PASS
+  Command: node --check js/*.js
+  Result: ALL_JS_SYNTAX_OK
+
+- Vite production build: PASS WITH WARNINGS
+  Command: npm run build
+  Result: build completed successfully, but Vite emitted warnings about scripts in index.html not using type="module".
+
+- In-repo automated test suite: FAIL
+  Command: node test/run-tests.js
+  Result: 21 passed / 1 failed
+
+Findings
+--------
+1) Purchase-order inventory replenishment trigger is not awaited and fails in practice
+   File: js/api.js
+   Area: updatePurchaseOrder()
+   Evidence:
+   - The trigger branch checks prevStatus !== "Received" && data.status === "Received".
+   - It then does supplierMeds.forEach(async (... ) => { ... await MediStoreDB.update(...); });
+   - The function does not wait for the async callbacks before returning.
+   Impact:
+   - The inventory update is scheduled but not completed before the next read occurs.
+   - This causes the PO receipt -> inventory increase workflow to fail, which matches the failing automated test.
+   - The test result was: "Stock automatically increased upon PO receipt (Before: 170, After: 170)"
+
+2) Demo login identities are inconsistent across the project
+   Files: README.md, js/mockData.js, js/login.js, test/run-tests.js
+   Evidence:
+   - README lists Admin as aisha@medstore.com
+   - mockData.js stores users with aisha@medstore.com, rahul@medstore.com, sneha@medstore.com
+   - login.js auto-fills emails in the format <role>@medstore.com
+   - test/run-tests.js logs in as admin@medistore.com and pharmacist@medistore.com
+   Impact:
+   - The project has conflicting email domains and naming conventions (medstore vs medistore).
+   - This creates confusion and may break the intended demo sign-in flow when credentials are expected to match exactly.
+
+3) HTML scripts are not declared as ES modules, causing bundling warnings in Vite
+   File: index.html
+   Evidence:
+   - The page loads scripts with <script src="js/mockData.js"></script>, <script src="js/db.js"></script>, etc.
+   - Vite warns: "<script src='...'> in '/index.html' can't be bundled without type='module' attribute"
+   Impact:
+   - The build still succeeds, but the app is not using the expected modern module setup.
+   - It is a structural inconsistency with the Vite-based frontend and may cause future compatibility or optimization issues.
+
+4) Project advertises a backend-ready system but is actually mock-only
+   Files: index.html, js/api.js, README.md
+   Evidence:
+   - index.html says: "Backend integration ready via js/api.js"
+   - js/api.js defines const API_BASE_URL = "http://localhost:3000/api";
+   - js/api.js also defines const USE_MOCK = true;
+   - README explicitly states: "This is still a frontend demo. Authentication is not secure and there is no production database/backend."
+   Impact:
+   - The codebase is structured as if it could integrate with a backend, but the current implementation is a mock localStorage/IndexedDB frontend without true server-side interconnection.
+   - This is a design-level inconsistency between the project’s promise and the actual implementation.
+
+5) The project’s automated test suite exposes a real business-rule gap in the PO workflow
+   Files: js/api.js, test/run-tests.js
+   Evidence:
+   - The expected workflow is: PO received -> inventory stock increase.
+   - The test checks this behavior explicitly.
+   - The implementation currently fails because the async inventory writes are not awaited before the next read.
+   Impact:
+   - A core procurement workflow does not reliably update the inventory state.
+   - This makes the demo application unreliable for operational stock management.
+
+Validation details
+------------------
+- Static syntax result: PASS across all files under /js
+- Production build result: PASS with non-blocking warnings
+- Detailed runtime/business test result: 21 passed, 1 failed
+
+Conclusion
+----------
+The project is structurally valid as a frontend demo and passes static JavaScript validation, but it contains multiple inconsistencies and one real operational bug in the purchase-order workflow. The most important issue is the non-awaited async inventory update logic in js/api.js, followed by credential naming inconsistencies across the app.
